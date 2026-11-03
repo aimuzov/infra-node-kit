@@ -71,10 +71,21 @@ export async function sendMessages({
 					throw new Error('Telegram request failed')
 				}
 				let cleanupFailed = false
+				let cleanupTimer
 				try {
-					await response.body?.cancel()
+					const body = response.body
+					if (body && !body.locked) {
+						await Promise.race([
+							body.cancel(),
+							new Promise((_, reject) => {
+								cleanupTimer = setTimeout(() => reject(new Error()), 1000)
+							}),
+						])
+					}
 				} catch {
 					cleanupFailed = true
+				} finally {
+					clearTimeout(cleanupTimer)
 				}
 				if (!response.ok) throw new Error('Telegram HTTP ' + response.status)
 				if (cleanupFailed) throw new Error('Telegram response cleanup failed')

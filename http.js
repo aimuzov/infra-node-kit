@@ -15,6 +15,7 @@ export async function readBody(
 		throw new RangeError('limit must be a non-negative safe integer')
 	const chunks = []
 	let size = 0
+	let tooLarge = false
 	const stream =
 		request instanceof Readable
 			? request.iterator({ destroyOnReturn: false })
@@ -23,10 +24,14 @@ export async function readBody(
 		const bytes = Buffer.from(chunk)
 		size += bytes.length
 		if (size > limit) {
-			if (request instanceof Readable) request.resume()
-			throw new HttpError(413, tooLargeMessage)
+			tooLarge = true
+			break
 		}
 		chunks.push(bytes)
+	}
+	if (tooLarge) {
+		if (request instanceof Readable) request.resume()
+		throw new HttpError(413, tooLargeMessage)
 	}
 	return Buffer.concat(chunks)
 }

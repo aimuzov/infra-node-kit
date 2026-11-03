@@ -16,4 +16,6 @@ Run `npm test`, `npm run check` and `npm pack --dry-run`.
 
 TypeScript consumers need `@types/node` as a development dependency. Add `"types": ["node"]` to `compilerOptions` when using TypeScript 6 or an explicit types list; also retain any other types your application needs.
 
-On an oversized Node readable request, `readBody` preserves the stream and drains the remaining body so the handler can send 413. Generic async iterables keep their usual iterator cleanup behavior.
+On an oversized Node.js `Readable` request, `readBody` preserves the stream and drains the remaining body so the handler can send 413. Generic async iterables keep their usual iterator cleanup behavior.
+
+Cleanup of an unlocked response body waits at most one second. A cleanup failure rejects that recipient with a redacted error; an HTTP failure retains its status. Locked injected bodies remain owned by their reader.

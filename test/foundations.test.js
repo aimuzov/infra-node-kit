@@ -229,3 +229,106 @@ test('cleanup failures are redacted and preserve HTTP failure status', async () 
 	assert.equal(results[0].reason.message, 'Telegram response cleanup failed')
 	assert.equal(results[1].reason.message, 'Telegram HTTP 401')
 })
+
+test(
+	'oversized request drains before another keep-alive request',
+	{ timeout: 5000 },
+	async (t) => {
+		const { createServer, request, Agent } = await import('node:http')
+		const { setTimeout: delay } = await import('node:timers/promises')
+		let resolveDrained
+		const drained = new Promise((resolve) => {
+			resolveDrained = resolve
+		})
+		const server = createServer(async (req, res) => {
+			if (req.method === 'GET') {
+				res.end('next')
+				return
+			}
+			req.once('end', resolveDrained)
+			try {
+				await readBody(req, { limit: 2 })
+			} catch (error) {
+				res.statusCode = error.status
+			}
+			res.end('too large')
+		})
+		const agent = new Agent({ keepAlive: true, maxSockets: 1 })
+		t.after(() => {
+			agent.destroy()
+			server.closeAllConnections()
+			server.close()
+		})
+		await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+		const options = {
+			hostname: '127.0.0.1',
+			port: server.address().port,
+			agent,
+		}
+		const call = (method, data) =>
+			new Promise((resolve, reject) => {
+				const req = request({ ...options, method }, (res) => {
+					const socket = res.socket
+					let text = ''
+					res.setEncoding('utf8')
+					res.on('data', (chunk) => {
+						text += chunk
+					})
+					res.on('end', () => resolve({ status: res.statusCode, text, socket }))
+				})
+				req.on('error', reject)
+				req.end(data)
+			})
+		const first = await call('POST', Buffer.alloc(4 * 1024 * 1024))
+		assert.equal(first.status, 413)
+		assert.equal(
+			await Promise.race([
+				drained.then(() => true),
+				delay(1000).then(() => false),
+			]),
+			true,
+		)
+		const second = await call('GET')
+		assert.equal(second.text, 'next')
+		assert.equal(second.socket, first.socket)
+	},
+)
+test(
+	'cloned response cleanup cannot keep delivery pending',
+	{ timeout: 4000 },
+	async (t) => {
+		const { setTimeout: delay } = await import('node:timers/promises')
+		const original = new Response(new ReadableStream())
+		const clone = original.clone()
+		t.after(() => {
+			void original.body.cancel()
+		})
+		const delivery = sendMessages({
+			token,
+			recipients: ['one'],
+			messages: ['message'],
+			fetch: async () => clone,
+		})
+		const results = await Promise.race([delivery, delay(1500).then(() => null)])
+		assert.notEqual(results, null)
+		assert.equal(results[0].reason.message, 'Telegram response cleanup failed')
+	},
+)
+test('locked injected response bodies belong to their reader and do not stop later messages', async (t) => {
+	const readers = []
+	t.after(() => Promise.all(readers.map((reader) => reader.cancel())))
+	let sent = 0
+	const results = await sendMessages({
+		token,
+		recipients: ['one'],
+		messages: ['first', 'second'],
+		fetch: async () => {
+			sent++
+			const response = new Response(new ReadableStream())
+			readers.push(response.body.getReader())
+			return response
+		},
+	})
+	assert.equal(results[0].status, 'fulfilled')
+	assert.equal(sent, 2)
+})
