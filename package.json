@@ -1,0 +1,40 @@
+{
+	"name": "@aimuzov/infra-node-kit",
+	"version": "0.1.0",
+	"description": "Shared HTTP and Telegram primitives for Node.js services",
+	"type": "module",
+	"license": "MIT",
+	"engines": {
+		"node": ">=24"
+	},
+	"exports": {
+		"./http.js": {
+			"types": "./http.d.ts",
+			"default": "./http.js"
+		},
+		"./telegram.js": {
+			"types": "./telegram.d.ts",
+			"default": "./telegram.js"
+		}
+	},
+	"files": [
+		"*.js",
+		"*.d.ts",
+		"README.md",
+		"README.ru.md",
+		"LICENSE"
+	],
+	"scripts": {
+		"test": "node --test",
+		"check": "node --check http.js && node --check telegram.js && tsc --noEmit --types node --strict --module nodenext --target es2023 http.d.ts telegram.d.ts",
+		"format": "prettier --write .",
+		"format:check": "prettier --check ."
+	},
+	"devDependencies": {
+		"@types/node": "26.6.5",
+		"typescript": "6.0.3",
+		"prettier": "3.9.9"
+	},
+	"repository": "github:aimuzov/infra-node-kit",
+	"private": true
+}
