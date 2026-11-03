@@ -70,25 +70,23 @@ export async function sendMessages({
 				} catch {
 					throw new Error('Telegram request failed')
 				}
-				let cleanupFailed = false
 				let cleanupTimer
 				try {
 					const body = response.body
 					if (body && !body.locked) {
 						await Promise.race([
 							body.cancel(),
-							new Promise((_, reject) => {
-								cleanupTimer = setTimeout(() => reject(new Error()), 1000)
+							new Promise((resolve) => {
+								cleanupTimer = setTimeout(resolve, 1000)
 							}),
 						])
 					}
 				} catch {
-					cleanupFailed = true
+					// A retry here could send the same message twice.
 				} finally {
 					clearTimeout(cleanupTimer)
 				}
 				if (!response.ok) throw new Error('Telegram HTTP ' + response.status)
-				if (cleanupFailed) throw new Error('Telegram response cleanup failed')
 			}
 		}),
 	)

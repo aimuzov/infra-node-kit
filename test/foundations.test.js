@@ -209,13 +209,15 @@ test('fan-out releases real response streams for successful and failed requests'
 	assert.equal(results[0].status, 'fulfilled')
 	assert.equal(results[1].reason.message, 'Telegram HTTP 401')
 })
-test('cleanup failures are redacted and preserve HTTP failure status', async () => {
+test('cleanup failures preserve successful delivery and HTTP failure status', async () => {
+	const sent = []
 	const results = await sendMessages({
 		token,
 		recipients: ['good', 'bad'],
-		messages: ['one'],
+		messages: ['one', 'two'],
 		fetch: async (_url, init) => {
-			const id = JSON.parse(init.body).chat_id
+			const { chat_id: id, text } = JSON.parse(init.body)
+			sent.push([id, text])
 			return new Response(
 				new ReadableStream({
 					cancel() {
@@ -226,7 +228,14 @@ test('cleanup failures are redacted and preserve HTTP failure status', async () 
 			)
 		},
 	})
-	assert.equal(results[0].reason.message, 'Telegram response cleanup failed')
+	assert.equal(results[0].status, 'fulfilled')
+	assert.deepEqual(
+		sent.filter(([id]) => id === 'good'),
+		[
+			['good', 'one'],
+			['good', 'two'],
+		],
+	)
 	assert.equal(results[1].reason.message, 'Telegram HTTP 401')
 })
 
@@ -303,15 +312,17 @@ test(
 		t.after(() => {
 			void original.body.cancel()
 		})
+		let sent = 0
 		const delivery = sendMessages({
 			token,
 			recipients: ['one'],
-			messages: ['message'],
-			fetch: async () => clone,
+			messages: ['one', 'two'],
+			fetch: async () => (++sent === 1 ? clone : new Response()),
 		})
 		const results = await Promise.race([delivery, delay(1500).then(() => null)])
 		assert.notEqual(results, null)
-		assert.equal(results[0].reason.message, 'Telegram response cleanup failed')
+		assert.equal(results[0].status, 'fulfilled')
+		assert.equal(sent, 2)
 	},
 )
 test('locked injected response bodies belong to their reader and do not stop later messages', async (t) => {

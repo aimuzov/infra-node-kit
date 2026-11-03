@@ -18,4 +18,4 @@ TypeScript consumers need `@types/node` as a development dependency. Add `"types
 
 On an oversized Node.js `Readable` request, `readBody` preserves the stream and drains the remaining body so the handler can send 413. Generic async iterables keep their usual iterator cleanup behavior.
 
-Cleanup of an unlocked response body waits at most one second. A cleanup failure rejects that recipient with a redacted error; an HTTP failure retains its status. Locked injected bodies remain owned by their reader.
+Cleanup of an unlocked response body waits at most one second. The HTTP status determines delivery even if cleanup fails or times out. Locked injected bodies remain owned by their reader.
