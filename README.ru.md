@@ -13,3 +13,7 @@ Telegram: `verifyInitData(initData, options)` проверяет подпись 
 `sendMessages({token, recipients, messages, timeoutMs?, fetch?, timeout?})` отправляет сообщения с HTML-разметкой по порядку каждому получателю. Получатели независимы; результат -- массив `PromiseSettledResult<void>` в исходном порядке. Приложение решает, достаточно ли частичной доставки. `fetch` и `timeout` подменяются в тестах; `timeoutMs` необязателен. Диагностика не включает токен, тело ответа и исходную сетевую ошибку.
 
 Проверки: `npm test`, `npm run check`, `npm pack --dry-run`.
+
+Для TypeScript установите `@types/node` в devDependencies. В TypeScript 6 и при явном списке типов добавьте `"types": ["node"]` в `compilerOptions`, сохранив остальные нужные приложению типы.
+
+При превышении лимита `readBody` сохраняет Node readable stream и дренирует остаток тела: обработчик может отправить 413. Для остальных async iterable сохраняется обычная очистка итератора.

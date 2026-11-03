@@ -10,8 +10,10 @@ export function verifyInitData(
 	},
 ) {
 	const fail = (reason) => ({ ok: false, reason })
-	if (!initData) return fail('missing')
-	if (initData.length > maxLength) return fail('malformed')
+	if (initData === undefined || initData === null || initData === '')
+		return fail('missing')
+	if (typeof initData !== 'string' || initData.length > maxLength)
+		return fail('malformed')
 	const params = new URLSearchParams(initData)
 	const hash = params.get('hash')
 	if (!hash || !/^[0-9a-f]{64}$/i.test(hash)) return fail('malformed')
@@ -68,7 +70,14 @@ export async function sendMessages({
 				} catch {
 					throw new Error('Telegram request failed')
 				}
+				let cleanupFailed = false
+				try {
+					await response.body?.cancel()
+				} catch {
+					cleanupFailed = true
+				}
 				if (!response.ok) throw new Error('Telegram HTTP ' + response.status)
+				if (cleanupFailed) throw new Error('Telegram response cleanup failed')
 			}
 		}),
 	)

@@ -132,3 +132,100 @@ test('HTTP delivery failures redact response bodies', async () => {
 	})
 	assert.equal(result[0].reason.message, 'Telegram HTTP 401')
 })
+
+test('oversized IncomingMessage still lets the handler send 413', async (t) => {
+	const { createServer, request } = await import('node:http')
+	const server = createServer(async (req, res) => {
+		try {
+			await readBody(req, { limit: 2 })
+			res.end('ok')
+		} catch (error) {
+			res.writeHead(error.status ?? 500)
+			res.end(JSON.stringify({ destroyed: req.destroyed }))
+		}
+	})
+	t.after(() => {
+		server.closeAllConnections()
+		server.close()
+	})
+	await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+	const response = await new Promise((resolve, reject) => {
+		const req = request(
+			{
+				hostname: '127.0.0.1',
+				port: server.address().port,
+				method: 'POST',
+				headers: { 'content-length': '1000' },
+			},
+			(res) => {
+				let text = ''
+				res.setEncoding('utf8')
+				res.on('data', (chunk) => {
+					text += chunk
+				})
+				res.on('end', () => {
+					req.end()
+					resolve({ status: res.statusCode, text })
+				})
+			},
+		)
+		req.on('error', reject)
+		req.write('large')
+	})
+	assert.deepEqual(response, { status: 413, text: '{"destroyed":false}' })
+})
+test('Mini App returns a failure for non-string inputs', () => {
+	const options = { botToken: token, maxAgeSec: 10, nowSec: 110 }
+	for (const input of [null, undefined, ''])
+		assert.deepEqual(verifyInitData(input, options), {
+			ok: false,
+			reason: 'missing',
+		})
+	for (const input of [false, 0, 1, {}, [1], Symbol('data')])
+		assert.deepEqual(verifyInitData(input, options), {
+			ok: false,
+			reason: 'malformed',
+		})
+})
+test('fan-out releases real response streams for successful and failed requests', async () => {
+	const cancelled = []
+	const results = await sendMessages({
+		token,
+		recipients: ['good', 'bad'],
+		messages: ['one'],
+		fetch: async (_url, init) => {
+			const id = JSON.parse(init.body).chat_id
+			return new Response(
+				new ReadableStream({
+					cancel() {
+						cancelled.push(id)
+					},
+				}),
+				{ status: id === 'good' ? 200 : 401 },
+			)
+		},
+	})
+	assert.deepEqual(cancelled.sort(), ['bad', 'good'])
+	assert.equal(results[0].status, 'fulfilled')
+	assert.equal(results[1].reason.message, 'Telegram HTTP 401')
+})
+test('cleanup failures are redacted and preserve HTTP failure status', async () => {
+	const results = await sendMessages({
+		token,
+		recipients: ['good', 'bad'],
+		messages: ['one'],
+		fetch: async (_url, init) => {
+			const id = JSON.parse(init.body).chat_id
+			return new Response(
+				new ReadableStream({
+					cancel() {
+						throw new Error(token)
+					},
+				}),
+				{ status: id === 'good' ? 200 : 401 },
+			)
+		},
+	})
+	assert.equal(results[0].reason.message, 'Telegram response cleanup failed')
+	assert.equal(results[1].reason.message, 'Telegram HTTP 401')
+})

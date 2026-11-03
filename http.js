@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream'
+
 export class HttpError extends Error {
 	constructor(status, message) {
 		super(message)
@@ -13,10 +15,17 @@ export async function readBody(
 		throw new RangeError('limit must be a non-negative safe integer')
 	const chunks = []
 	let size = 0
-	for await (const chunk of request) {
+	const stream =
+		request instanceof Readable
+			? request.iterator({ destroyOnReturn: false })
+			: request
+	for await (const chunk of stream) {
 		const bytes = Buffer.from(chunk)
 		size += bytes.length
-		if (size > limit) throw new HttpError(413, tooLargeMessage)
+		if (size > limit) {
+			if (request instanceof Readable) request.resume()
+			throw new HttpError(413, tooLargeMessage)
+		}
 		chunks.push(bytes)
 	}
 	return Buffer.concat(chunks)

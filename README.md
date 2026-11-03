@@ -13,3 +13,7 @@ The result is `{ok:true, user, params}` or `{ok:false, reason}`, where reason is
 `sendMessages({token, recipients, messages, timeoutMs?, fetch?, timeout?})` sends HTML messages sequentially per recipient, with independent recipients. It returns `PromiseSettledResult<void>[]` in recipient order. Applications decide whether partial delivery is sufficient. Fetch and timeout are injectable; timeoutMs is optional. Diagnostics omit tokens, response bodies and original network errors.
 
 Run `npm test`, `npm run check` and `npm pack --dry-run`.
+
+TypeScript consumers need `@types/node` as a development dependency. Add `"types": ["node"]` to `compilerOptions` when using TypeScript 6 or an explicit types list; also retain any other types your application needs.
+
+On an oversized Node readable request, `readBody` preserves the stream and drains the remaining body so the handler can send 413. Generic async iterables keep their usual iterator cleanup behavior.
